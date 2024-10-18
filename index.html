@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Redsis Listener</title>
+    <link rel="stylesheet" href="app.css"/>
+    <style>
+        /* Additional styles to support the new layout */
+        #video-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%; /* Full width */
+            flex-direction: column; /* Stack video and messages */
+        }
+
+        #background-video {
+            width: 80%; /* Adjust the video size */
+            margin-bottom: 20px; /* Space between video and text */
+        }
+    </style>
+</head>
+<body>
+    <div class="titleBar">
+        <img src="./assets/logo-redsis-blanco.png" alt="logo redsis" width="100px" height="50px">
+    </div>
+
+    <div class="dataEntriesContainer">
+        <!-- Video Container -->
+        <div id="video-container">
+            <video id="background-video" autoplay loop muted>
+                <source src="./assets/Locations & Certificats.mp4" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+
+            <!-- Status Messages Below Video -->
+            <div class="dataEntry">
+                <p id="serverStatus">Server is starting...</p>
+                <p class="displayDataEntry">Waiting for events...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');  // Access Electron IPC in renderer
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const displayDataEntry = document.querySelector('.displayDataEntry');
+            const serverStatus = document.getElementById('serverStatus');
+            const backgroundVideo = document.getElementById('background-video');
+
+            // Function to toggle video display
+            function toggleVideo(showVideo) {
+                if (showVideo) {
+                    backgroundVideo.style.display = "block"; // Show the video
+                } else {
+                    backgroundVideo.style.display = "none"; // Hide the video, but keep the text visible
+                }
+            }
+
+            // Function to select a Spanish voice
+            function getSpanishVoice() {
+                const voices = window.speechSynthesis.getVoices();
+                // Log the available voices to the console to inspect them
+                console.log(voices);
+
+                // Find a Latin American Spanish female voice
+                const spanishVoice = voices.find(voice =>
+                    voice.lang.includes('es') && voice.name.includes('Sabina')
+                );
+                return spanishVoice || voices.find(voice => voice.lang.includes('es')); // Fallback to any Spanish voice
+            }
+
+            // Set up speech synthesis
+            function speakText(text) {
+                const utterance = new SpeechSynthesisUtterance(text);
+                const spanishVoice = getSpanishVoice();
+                if (spanishVoice) {
+                    utterance.voice = spanishVoice;
+                } else {
+                    console.warn('No suitable Spanish voice found, using default voice.');
+                }
+                window.speechSynthesis.speak(utterance);
+            }
+
+            // Initially show the video since the server is waiting for events
+            toggleVideo(true);
+
+            // Listen for the display-event event sent from the backend
+            ipcRenderer.on('display-event', (event, data) => {
+                // Hide the video when processing an event
+                toggleVideo(false);
+                displayDataEntry.textContent = `Name: ${data.name}, Employee No: ${data.employeeNoString}`;
+
+                // Announce the employee name in Spanish
+                speakText(data.name);
+
+                // After some time, go back to waiting state and show video again
+                setTimeout(() => {
+                    displayDataEntry.textContent = "Waiting for events...";
+                    toggleVideo(true);  // Show video again after processing
+                }, 5000); // Adjust the delay based on your needs
+            });
+
+            // Listen for server status updates
+            ipcRenderer.on('server-status', (event, data) => {
+                if (data.status === 'started') {
+                    serverStatus.textContent = `Server started at http://${data.ip}:${data.port}${data.url}... waiting for events.`;
+                } else if (data.status === 'stopped') {
+                    serverStatus.textContent = 'Server stopped.';
+                }
+            });
+
+            // Preload the voices to avoid delay
+            window.speechSynthesis.onvoiceschanged = () => getSpanishVoice();
+        });
+    </script>
+</body>
+</html>
